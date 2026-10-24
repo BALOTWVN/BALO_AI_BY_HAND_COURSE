@@ -16,7 +16,7 @@ ORDER = [
     'd1_math_nn.js', 'd2_cnn_seq.js', 'd3_transformer.js', 'd4_gen_modern.js',
     'e0_math.js', 'e1_nn.js', 'e2_cnn.js', 'e3_tf.js', 'e4_gen.js', 'e5_new.js',
     'f1_overview.js', 'f2_classic.js', 'f3_symbolic.js', 'f4_practice.js', 'f5_caps.js',
-    'f6_pros.js', 'f7_models.js', 'f8_kit.js',
+    'f6_pros.js', 'f7_models.js', 'f8_kit.js', 'f9_guide.js',
     'widgets1.js', 'widgets2.js', 'widgets3.js', 'widgets4.js', 'widgets5.js', 'widgets6.js',
     'stepper.js', 'sw_defs.js', 'sw_defs2.js', 'sw_long.js', 'ill.js', 'flow.js', 'flow_specs.js',
     'speech_vi.js', 'video.js', 'kit_ui.js', 'map.js', 'app.js',

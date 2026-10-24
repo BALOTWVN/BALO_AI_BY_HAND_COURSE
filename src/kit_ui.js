@@ -106,10 +106,14 @@ function renderKit() {
     <li><b>Đầu ra</b> quyết định mô hình làm gì: nhãn, hộp, mặt nạ, chữ, ảnh, dự báo.</li></ol>
     <p>Mẹo: ViT ra chuỗi còn đầu YOLO cần lưới, nên "ViT + YOLO" phải có khớp <i>Xếp token thành lưới</i>. Còn đầu DETR ăn chuỗi token trực tiếp, nên "ViT + DETR" cắm thẳng được.</p></details>
 
+  <div class="section-label"><span class="hand">Lắp có hướng dẫn: đi từ suy nghĩ</span></div>
+  <p class="note-s" style="margin-top:-4px">Chọn bài toán → chọn điều kiện thực tế → xem bản thiết kế còn trống → lắp từng khối với câu hỏi gợi ý. Chọn sai sẽ được giải thích vì sao.</p>
+  <div id="kitGuide"></div>
   <div class="section-label"><span class="hand">Bảng ghép nhanh: lắp X với Y ra cái gì?</span></div>
   <div class="kgrid-wrap"><table class="kgrid"><thead><tr><th></th>${KGRID.cols.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>${KGRID.rows.map(r => `<tr><th>${r[1]}</th>${KGRID.cols.map(c => { const k = KGRID.cell[r[0] + ',' + c[0]]; return k ? `<td><button class="kg" data-r="${k}">${KRBY[k].n.replace(/^.*= /, '')}</button></td>` : '<td class="kg0">—</td>'; }).join('')}</tr>`).join('')}</tbody></table></div>
 
-  <div class="section-label"><span class="hand">Bàn lắp ráp</span></div>
+  <div class="section-label" id="kitFree"><span class="hand">Bàn lắp tự do</span></div>
+  <p class="note-s" style="margin-top:-4px">Đã quen rồi thì tự ghép bất kỳ khối nào. Xưởng kiểm tra từng khớp và nhận ra mô hình nổi tiếng nếu bạn lắp trúng công thức.</p>
   <div class="kit">
     <div class="kit-pal">${KCAT.map(([c, t, col]) => `<div class="kp-group"><div class="kp-h" style="--bc:${col}">${t}</div><div class="kp-b">${Object.keys(KB).filter(id => KB[id].c === c).map(id => kitBrick(id)).join('')}</div></div>`).join('')}</div>
     <div class="kit-main">
@@ -190,4 +194,92 @@ function renderKit() {
   $$('.kz', $('#page')).forEach(z => { z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('drop'); }); z.addEventListener('dragleave', () => z.classList.remove('drop'));
     z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('drop'); const id = e.dataTransfer.getData('text/plain'); if (KB[id]) { zone = z.dataset.z; add(id, z.dataset.z); } }); });
   if (preset && KRBY[preset]) load(KRBY[preset].sig[0]); else load(KRBY.vityolo.sig[0]);
+  renderGuide($('#kitGuide'), sig => { load(sig); setTimeout(() => { const o = $('#kitOut'); if (o) o.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80); });
+}
+
+/* ---- CHẾ ĐỘ LẮP CÓ HƯỚNG DẪN ---- */
+function renderGuide(el, finish) {
+  const S = { stage: 'task', task: null, r: null, sig: null, steps: [], built: { A: [], B: [], T: [] }, k: 0, miss: 0, hint: 0, tried: [], fb: '' };
+  const hsh = (s, n) => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % n; };
+  const typeOf = zone => { if (zone === 'T') { const ev = kitEval(S.built); return ev.end ? ev.end.t : null; } const ev = kitEval({ A: S.built[zone], B: [], T: [] }); return ev.end ? ev.end.t : null; };
+  const kt = t => (t ? `<span class="kt" style="--k:${KT[t][1]}">${tn(t)}</span>` : '—');
+  const pipe = (showAll) => {
+    const p = kitParse(S.sig); const rowZ = (z, lab) => { const tgt = p[z]; if (!tgt.length) return ''; const done = S.built[z];
+      return `<div class="gp-row"><span class="gp-lab">${lab}</span>${tgt.map((id, i) => { const isCur = S.stage === 'build' && S.steps[S.k] && S.steps[S.k].z === z && S.steps[S.k].i === i; return (i ? '<span class="kjoint"></span>' : '') + (i < done.length || showAll ? kitBrick(showAll && i >= done.length ? id : done[i], 'tabindex="-1"') : `<span class="gp-q${isCur ? ' cur' : ''}">?</span>`); }).join('')}</div>`; };
+    return `<div class="gpipe">${rowZ('A', p.B.length ? 'Nhánh A' : 'Mô hình')}${rowZ('B', 'Nhánh B')}${rowZ('T', p.B.length ? 'Sau khi ghép' : 'Tiếp')}</div>`;
+  };
+  const optionsFor = () => {
+    const st = S.steps[S.k], tgt = st.id, b = KB[tgt]; let pool;
+    if (b.c === 'in') pool = Object.keys(KB).filter(id => KB[id].c === 'in' && id !== tgt);
+    else if (b.c === 'join') pool = Object.keys(KB).filter(id => KB[id].c === 'join' && id !== tgt);
+    else { const cur = typeOf(st.z); const comp = Object.keys(KB).filter(id => id !== tgt && !['in', 'join'].includes(KB[id].c) && KB[id].i.includes(cur)); const inc = Object.keys(KB).filter(id => id !== tgt && !['in', 'join'].includes(KB[id].c) && !KB[id].i.includes(cur));
+      const pref = comp.filter(id => GALT[id + '>' + tgt]); const c1 = (pref.length ? pref : comp); pool = [];
+      if (c1.length) pool.push(c1[hsh(S.sig + S.k, c1.length)]); const c2 = comp.filter(x => !pool.includes(x)); if (c2.length) pool.push(c2[hsh(S.sig + S.k + 'b', c2.length)]);
+      if (inc.length) pool.push(inc[hsh(S.sig + S.k + 'c', inc.length)]); }
+    const picks = pool.slice(0, 3); const all = [...picks, tgt]; const off = hsh(S.sig + 'o' + S.k, all.length);
+    return all.map((_, i) => all[(i + off) % all.length]);
+  };
+  const judge = id => {
+    const st = S.steps[S.k], tgt = st.id;
+    if (id === tgt) return { ok: true };
+    const b = KB[id], alt = GALT[id + '>' + tgt];
+    if (b.c === 'in') return { ok: false, msg: `Bài toán "${S.task.t}" nhận <b>${S.task.in}</b>. Nhánh ${st.z} ở đây cần ${KB[tgt].n.toLowerCase()}, không phải ${b.n.toLowerCase()}.` };
+    if (b.c === 'join') { const ta = typeOf('A'), tb = typeOf('B'); const fit = b.i.includes(ta) && b.i2.includes(tb);
+      return { ok: false, msg: alt || (fit ? `"${b.n}" cắm được, nhưng nó ra ${b.o({ t: ta, H: 64, W: 64, C: 4, N: 10, d: 8 }, { t: tb, N: 8, d: 8 }) ? tn(b.o({ t: ta, H: 64, W: 64, C: 4, N: 10, d: 8 }, { t: tb, N: 8, d: 8 }).t) : '?'}, không đưa tới <b>${S.task.out}</b> mà bài toán cần.` : `"${b.n}" cần nhánh A ra ${b.i.map(tn).join(' hoặc ')} và nhánh B ra ${b.i2.map(tn).join(' hoặc ')}; hiện nhánh A ra ${tn(ta)}, nhánh B ra ${tn(tb)}.`) }; }
+    const cur = typeOf(st.z);
+    if (!b.i.includes(cur)) return { ok: false, msg: `Không cắm được: "${b.n}" cần <b>${b.i.map(tn).join(' hoặc ')}</b>, mà khối trước đang ra <b>${tn(cur)}</b>.` };
+    const out = b.o({ t: cur, H: 7, W: 7, C: 8, N: 50, d: 8, L: 512, cls: 1 }).t;
+    if (KOUT.includes(out)) return { ok: false, msg: alt || `"${b.n}" cắm được nhưng là đầu ra <b>${tn(out)}</b>, trong khi bài toán cần <b>${S.task.out}</b>${S.k < S.steps.length - 1 ? ', và còn khối phải lắp trước đó' : ''}.` };
+    return { ok: false, msg: alt || `"${b.n}" cắm được (nó nhận ${tn(cur)}, ra ${tn(out)}), nhưng chưa phải bước cần ở đây. Đọc lại câu hỏi gợi ý: khối tiếp theo phải giải quyết điều gì?` };
+  };
+  const draw = () => {
+    let h = '';
+    if (S.stage === 'task') {
+      h = `<div class="g-step"><span class="g-n">1</span><div><b>Bạn muốn mô hình làm gì?</b><div class="note-s">Bắt đầu từ bài toán, không phải từ khối. Chọn một:</div></div></div>
+        <div class="g-tasks">${GTASK.map(t => `<button class="g-task" data-gt="${t.id}"><span class="g-ic">${t.ic}</span><b>${t.t}</b><small>${t.d}</small><span class="g-io">${t.in} → ${t.out}</span></button>`).join('')}</div>`;
+    } else if (S.stage === 'cond') {
+      h = `<div class="g-crumb"><button class="linkbtn" data-gback="task">← Đổi bài toán</button> ${S.task.ic} ${S.task.t}</div>
+        <div class="g-step"><span class="g-n">2</span><div><b>${S.task.q}</b><div class="note-s">Cùng một bài toán, điều kiện khác thì kiến trúc khác.</div></div></div>
+        <div class="g-conds">${S.task.opt.map(([rid, t, why]) => `<button class="g-cond" data-gc="${rid}"><b>${t}</b><small>${why}</small></button>`).join('')}</div>`;
+    } else if (S.stage === 'plan') {
+      const p = kitParse(S.sig);
+      h = `<div class="g-crumb"><button class="linkbtn" data-gback="cond">← Đổi điều kiện</button> ${S.task.ic} ${S.task.t}</div>
+        <div class="g-step"><span class="g-n">3</span><div><b>Bản thiết kế: ${S.steps.length} khối${p.B.length ? ', hai nhánh' : ''}</b><div class="note-s">Trước khi lắp, tự đoán xem mỗi dấu ? là khối gì. Dữ liệu vào: <b>${S.task.in}</b>, đầu ra cần: <b>${S.task.out}</b>.</div></div></div>
+        ${pipe(false)}
+        <div class="g-think">${p.B.length ? '<b>Vì sao có hai nhánh?</b> Bài toán có hai loại dữ liệu. Mỗi loại cần bộ mã hóa riêng, rồi một khối ghép đưa chúng về chung.' : '<b>Khung tư duy:</b> dữ liệu thô → "mắt" (bộ mã hóa) → khớp nối nếu kiểu dữ liệu chưa vừa → đầu ra đúng bài toán.'}</div>
+        <div class="g-act"><button class="btn solid" data-gstart="1">Bắt đầu lắp từng khối →</button></div>`;
+    } else if (S.stage === 'build') {
+      const st = S.steps[S.k], tgt = st.id, th = GTHINK[tgt] || ['Khối tiếp theo là gì?', KB[tgt].d], cur = KB[tgt].c === 'in' ? null : KB[tgt].c === 'join' ? null : typeOf(st.z);
+      const cat = KCAT.find(c => c[0] === KB[tgt].c);
+      h = `<div class="g-crumb"><button class="linkbtn" data-gback="plan">← Bản thiết kế</button> ${S.task.ic} ${S.task.t} · khối ${S.k + 1}/${S.steps.length}</div>${pipe(false)}
+        <div class="g-q"><div class="g-qh">🤔 ${th[0]}</div>
+        <div class="note-s">${KB[tgt].c === 'join' ? `Nhánh A đang ra ${kt(typeOf('A'))}, nhánh B đang ra ${kt(typeOf('B'))}.` : cur ? `Khối trước đang ra ${kt(cur)}. Bài toán cần ra <b>${S.task.out}</b>.` : `Đây là khối đầu tiên của ${st.z === 'B' ? 'nhánh B' : 'mô hình'}.`}</div>
+        ${S.hint >= 1 ? `<div class="g-hint">Gợi ý: cần một khối loại <b style="color:${cat[2]}">${cat[1]}</b>.</div>` : ''}
+        <div class="g-opts">${optionsFor().map(id => kitBrick(id, `data-go="${id}"${S.tried.includes(id) ? ' data-tried="1"' : ''}${S.hint >= 2 && id === tgt ? ' data-glow="1"' : ''}`)).join('')}</div>
+        ${S.fb}
+        <div class="g-act">${S.hint < 2 ? `<button class="btn small ghost" data-ghint="1">💡 ${S.hint ? 'Chỉ luôn khối đúng' : 'Gợi ý'}</button>` : ''}<span class="note-s">Chọn sai không sao: đọc giải thích rồi chọn lại.</span></div></div>`;
+    } else if (S.stage === 'done') {
+      h = `<div class="g-crumb">${S.task.ic} ${S.task.t}</div>${pipe(true)}
+        <div class="g-done"><div class="g-qh">🎉 Lắp xong: ${S.r.n}</div><p>${S.miss === 0 ? 'Không chọn sai lần nào. Xuất sắc!' : `Bạn chọn lại ${S.miss} lần. Mỗi lần sai là một khớp nối bạn vừa hiểu thêm.`}</p>
+        <p><b>Mô hình thật:</b> ${S.r.m.map(mlink).join(' ') || S.r.extra || '—'}</p><ol class="kit-how">${S.r.how.map(x => `<li>${x}</li>`).join('')}</ol>
+        <div class="g-act"><button class="btn solid" data-gfinish="1">Xem sơ đồ động, kích thước, sức mạnh và nhược điểm ↓</button><button class="btn ghost" data-gback="task">Lắp mô hình khác</button></div></div>`;
+    }
+    el.innerHTML = `<div class="guide">${h}</div>`;
+  };
+  el.onclick = e => {
+    const t = e.target.closest('[data-gt]'); if (t) { S.task = GTASK.find(x => x.id === t.dataset.gt); S.stage = 'cond'; if (S.task.opt.length === 1) pickR(S.task.opt[0][0]); draw(); return; }
+    const c = e.target.closest('[data-gc]'); if (c) { pickR(c.dataset.gc); draw(); return; }
+    const bk = e.target.closest('[data-gback]'); if (bk) { S.stage = bk.dataset.gback; if (S.stage === 'cond' && S.task.opt.length === 1) S.stage = 'task'; S.built = { A: [], B: [], T: [] }; S.k = 0; S.fb = ''; S.tried = []; S.hint = 0; draw(); return; }
+    if (e.target.closest('[data-gstart]')) { S.stage = 'build'; S.k = 0; S.built = { A: [], B: [], T: [] }; S.miss = 0; S.fb = ''; S.tried = []; S.hint = 0; draw(); return; }
+    if (e.target.closest('[data-ghint]')) { S.hint++; draw(); return; }
+    if (e.target.closest('[data-gfinish]')) { finish(S.sig); return; }
+    const o = e.target.closest('[data-go]'); if (o && S.stage === 'build') {
+      const id = o.dataset.go, j = judge(id), st = S.steps[S.k];
+      if (j.ok) { S.built[st.z].push(id); const why = (GTHINK[id] || [])[1] || KB[id].d; S.k++; S.tried = []; S.hint = 0;
+        if (S.k >= S.steps.length) { S.stage = 'done'; S.fb = ''; } else S.fb = `<div class="g-fb ok">✓ <b>${KB[id].n}</b>: ${why}</div>`; }
+      else { S.miss++; if (!S.tried.includes(id)) S.tried.push(id); S.fb = `<div class="g-fb bad">✗ ${j.msg}</div>`; }
+      draw(); }
+  };
+  const pickR = rid => { S.r = KRBY[rid]; S.sig = S.r.sig[0]; const p = kitParse(S.sig); S.steps = [...p.A.map((id, i) => ({ z: 'A', i, id })), ...p.B.map((id, i) => ({ z: 'B', i, id })), ...p.T.map((id, i) => ({ z: 'T', i, id }))]; S.stage = 'plan'; };
+  draw();
 }
