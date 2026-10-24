@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -55,18 +55,22 @@ jobs:
 
       - name: Khôi phục bộ nhớ đệm lồng tiếng
         uses: actions/cache@v4
+        # lưu cả khi bước TTS dừng giữa chừng để lần sau làm tiếp
         with:
           path: .tts-cache
-          key: tts-${{ env.TTS_ENGINE }}-${{ vars.TTS_VOICE }}-${{ hashFiles('narration/narration.json', 'tools/tts/build_audio.py') }}
+          key: tts-${{ env.TTS_ENGINE }}-${{ vars.TTS_VOICE }}-${{ github.run_id }}
           restore-keys: |
             tts-${{ env.TTS_ENGINE }}-${{ vars.TTS_VOICE }}-
 
       - name: Tạo lồng tiếng (mô hình TTS)
+        continue-on-error: true
+        timeout-minutes: 40
         run: |
           pip install -r tools/tts/requirements.txt
           python tools/tts/build_audio.py
 
       - name: Gom trang
+        if: always()
         run: |
           mkdir -p site
           cp index.html site/index.html
@@ -74,6 +78,7 @@ jobs:
           touch site/.nojekyll
 
       - uses: actions/upload-pages-artifact@v3
+        if: always()
         with:
           path: site
 

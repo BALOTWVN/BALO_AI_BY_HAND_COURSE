@@ -33,7 +33,8 @@ ENGINE = os.environ.get('TTS_ENGINE', 'edge').strip() or 'edge'
 DEFAULT_VOICE = {'edge': 'vi-VN-HoaiMyNeural', 'google': 'vi-VN-Neural2-A'}
 VOICE = os.environ.get('TTS_VOICE', '').strip() or DEFAULT_VOICE.get(ENGINE, '')
 RATE = os.environ.get('TTS_RATE', '').strip() or ('+0%' if ENGINE == 'edge' else '1.0')
-CONC = int(os.environ.get('TTS_CONCURRENCY', '6'))
+CONC = int(os.environ.get('TTS_CONCURRENCY', '4'))
+TIME_BUDGET = int(os.environ.get('TTS_TIME_BUDGET', '1800'))  # giây; hết giờ thì dừng, lần chạy sau làm tiếp nhờ bộ nhớ đệm
 LABELS = {'vi-VN-HoaiMyNeural': 'giọng nữ Hoài My (Microsoft Edge TTS)', 'vi-VN-NamMinhNeural': 'giọng nam Nam Minh (Microsoft Edge TTS)'}
 
 
@@ -44,7 +45,7 @@ def clip_id(text: str) -> str:
 async def synth_edge(text: str, dest: pathlib.Path) -> None:
     import edge_tts  # noqa: PLC0415
     tmp = dest.with_suffix('.part')
-    await edge_tts.Communicate(text, VOICE, rate=RATE).save(str(tmp))
+    await asyncio.wait_for(edge_tts.Communicate(text, VOICE, rate=RATE).save(str(tmp)), timeout=45)
     if tmp.stat().st_size < 1000:
         raise RuntimeError('file âm thanh quá nhỏ')
     tmp.replace(dest)
@@ -89,24 +90,35 @@ async def main() -> int:
     failed, done = [], 0
     t0 = time.time()
 
+    stop = False
+
     async def one(k: str, text: str) -> None:
-        nonlocal done
+        nonlocal done, stop
         async with sem:
-            for attempt in range(5):
+            if stop or time.time() - t0 > TIME_BUDGET:
+                stop = True
+                return
+            for attempt in range(3):
                 try:
                     await SYNTH[ENGINE](text, cache / f'{k}.mp3')
                     break
                 except SystemExit:
                     raise
                 except Exception as e:  # noqa: BLE001
-                    if attempt == 4:
-                        failed.append((k, str(e)[:120]))
-                    await asyncio.sleep(2 ** attempt)
+                    if attempt == 2:
+                        failed.append((k, f'{type(e).__name__}: {str(e)[:120]}'))
+                    await asyncio.sleep(1.5 * (attempt + 1))
             done += 1
-            if done % 100 == 0:
-                print(f'  {done}/{len(need)} câu · {time.time() - t0:.0f} giây', flush=True)
+            # dừng sớm nếu dịch vụ hỏng hẳn (20 câu đầu đều lỗi)
+            if done >= 20 and len(failed) >= done * 0.9:
+                stop = True
+                print('Dịch vụ TTS lỗi liên tục, dừng sớm. Lỗi mẫu:', failed[0][1], flush=True)
+            if done % 50 == 0:
+                print(f'  {done}/{len(need)} câu · lỗi {len(failed)} · {time.time() - t0:.0f} giây', flush=True)
 
     await asyncio.gather(*(one(k, v) for k, v in need.items()))
+    if stop:
+        print(f'Dừng ở {done}/{len(need)} câu (hết {TIME_BUDGET} giây hoặc lỗi liên tục); lần chạy sau sẽ làm tiếp.')
 
     # gom các file đang dùng vào site/audio và ghi manifest
     if OUT.exists():
@@ -135,7 +147,7 @@ async def main() -> int:
     for k, e in failed[:10]:
         print('  lỗi', k, e)
     total = have + missing
-    return 1 if total and missing / total > 0.2 else 0
+    return 0  # luôn đăng trang; câu thiếu lồng tiếng sẽ dùng giọng trình duyệt
 
 
 if __name__ == '__main__':
