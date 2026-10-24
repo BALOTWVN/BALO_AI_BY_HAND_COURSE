@@ -1,0 +1,88 @@
+name: Xây dựng và đăng trang
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      TTS_ENGINE: ${{ vars.TTS_ENGINE || 'edge' }}
+      TTS_VOICE: ${{ vars.TTS_VOICE }}
+      TTS_RATE: ${{ vars.TTS_RATE }}
+      GOOGLE_TTS_API_KEY: ${{ secrets.GOOGLE_TTS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Ghép trang web
+        run: python build.py
+
+      - name: Kiểm tra cú pháp JavaScript
+        run: |
+          python - <<'PY'
+          import re, pathlib
+          html = pathlib.Path('index.html').read_text(encoding='utf-8')
+          js = html.rsplit('<script>', 1)[1].rsplit('</script>', 1)[0]
+          pathlib.Path('dist/check.js').write_text(js, encoding='utf-8')
+          PY
+          node --check dist/check.js
+
+      - name: Xuất kịch bản lồng tiếng
+        run: |
+          npm ci
+          node tools/export_narration.js
+
+      - name: Khôi phục bộ nhớ đệm lồng tiếng
+        uses: actions/cache@v4
+        with:
+          path: .tts-cache
+          key: tts-${{ env.TTS_ENGINE }}-${{ vars.TTS_VOICE }}-${{ hashFiles('narration/narration.json', 'tools/tts/build_audio.py') }}
+          restore-keys: |
+            tts-${{ env.TTS_ENGINE }}-${{ vars.TTS_VOICE }}-
+
+      - name: Tạo lồng tiếng (mô hình TTS)
+        run: |
+          pip install -r tools/tts/requirements.txt
+          python tools/tts/build_audio.py
+
+      - name: Gom trang
+        run: |
+          mkdir -p site
+          cp index.html site/index.html
+          cp -r narration site/narration
+          touch site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

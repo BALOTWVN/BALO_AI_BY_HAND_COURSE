@@ -1,0 +1,13 @@
+{
+  "name": "balo-ai-by-hand-course",
+  "private": true,
+  "description": "Công cụ dựng trang và xuất kịch bản lồng tiếng cho khóa AI Bằng Tay",
+  "scripts": {
+    "build": "python build.py",
+    "narration": "node tools/export_narration.js",
+    "test": "node tools/test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.0"
+  }
+}
