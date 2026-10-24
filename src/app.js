@@ -222,6 +222,7 @@ function renderLesson(l) {
   if (KITLINK[l.id]) h += `<a class="kit-link" href="#kit" data-kit="${KITLINK[l.id]}"><span>🧩</span><div><b>Lắp thử trong Xưởng lắp ráp</b><small>${KRBY[KITLINK[l.id]].n}: xem mô hình này được ghép từ những khối nào và ghép sai thì hỏng ở đâu.</small></div></a>`;
   if (l.worked) h += `<div class="section-label"><span class="hand">Ví dụ giải mẫu</span></div><div class="worked"><h3>${l.worked.t}</h3><p class="setup"><b>Đề bài.</b> ${l.worked.setup}</p>${stepsHTML(l.worked.steps, l.worked.ans, 'w')}</div>`;
   if (SW[l.id]) h += `<div class="section-label"><span class="hand">Tính tay từng số</span></div><p class="note-s" style="margin-top:-4px">Mỗi lần bấm hiện ra một con số. Chép các ma trận ra giấy, tự tính ô tiếp theo rồi mới bấm để kiểm tra.</p><div id="swb"></div>`;
+  if (LONG_BY_LESSON[l.id]) h += `<div class="section-label"><span class="hand">Bài toán dài</span></div><p class="note-s" style="margin-top:-4px">Chuỗi nhiều tờ, mỗi tờ thêm đúng một thứ. Kết quả tờ trước được chép sang tờ sau. Làm hết chuỗi là bạn đã tự tay chạy cả mô hình.</p><div id="lgb"></div>`;
   if (l.w && W[l.w]) h += `<div class="section-label"><span class="hand">Phòng thí nghiệm</span></div><div class="sheet-box"><div class="sheet-head"><span class="hand">✍</span><b>${WT[l.w] || 'Trang tính'}</b><small>Đổi số, bấm vào ô, rồi chép ra giấy để tự tính lại</small></div><div class="sheet" id="wg"></div></div>`;
   if (l.miss && l.miss.length) h += `<div class="section-label"><span class="hand">Lỗi hay hiểu sai</span></div><div class="miss">${l.miss.map(([a, b]) => `<div><p class="wrong"><span>✗</span>${a}</p><p class="right"><span>✓</span>${b}</p></div>`).join('')}</div>`;
   if (l.ex && l.ex.length) {
@@ -247,6 +248,7 @@ function renderLesson(l) {
   illKeys(l).forEach((k, i) => { try { ILL[k]($('#ill' + i)); } catch (e) { $('#ill' + i).innerHTML = '<p class="note-s">Không tải được hình minh họa: ' + e.message + '</p>'; } });
   try { videoPlayer($('#vid'), l); } catch (e) { $('#vid').innerHTML = '<p class="note-s">Không tải được video: ' + e.message + '</p>'; }
   if (SW[l.id]) { try { swRender($('#swb'), l.id); } catch (e) { $('#swb').innerHTML = '<p class="note-s">Không tải được trang tính: ' + e.message + '</p>'; } }
+  if (LONG_BY_LESSON[l.id]) { try { renderLong($('#lgb'), LONG_BY_LESSON[l.id]); } catch (e) { $('#lgb').innerHTML = '<p class="note-s">Không tải được bài toán dài: ' + e.message + '</p>'; } }
   if (l.w && W[l.w]) { try { W[l.w]($('#wg')); } catch (e) { $('#wg').innerHTML = '<p class="note-s">Không tải được trang tính: ' + e.message + '</p>'; } }
   wireSteps($('#page'));
   $('#doneBtn').onclick = () => { if (DONE[l.id]) delete DONE[l.id]; else DONE[l.id] = 1; saveDone(); renderToc($('#search').value); renderLesson(l); };
